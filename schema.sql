@@ -1,0 +1,10 @@
+
+-- database/schema.sql
+CREATE TABLE IF NOT EXISTS tokens (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  address TEXT UNIQUE NOT NULL,
+  chain TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
