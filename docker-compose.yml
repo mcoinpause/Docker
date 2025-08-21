@@ -1,0 +1,35 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: memecoin
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U postgres"], interval: 5s, timeout: 5s, retries: 5
+
+  backend:
+    build: ./backend
+    env_file: .env
+    depends_on: [db]
+    ports:
+      - "4000:4000"
+
+  listener:
+    build: ./listener
+    env_file: .env
+    depends_on: [db]
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    env_file: .env
+    depends_on: [backend]
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata: {}
