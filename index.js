@@ -1,76 +1,42 @@
-
-// backend/index.js
 import express from 'express';
-import axios from 'axios';
-import pkg from 'pg';
 import cors from 'cors';
-
+import dotenv from 'dotenv';
+import pkg from 'pg';
+dotenv.config();
 const { Pool } = pkg;
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Postgres setup
-const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'memecoin_pulse',
-  password: 'yourpassword',
-  port: 5432,
+app.get('/health', async (req, res) => {
+  const ok = await pool.query('select 1 as ok').then(()=>true).catch(()=>false);
+  res.json({ ok, uptime: process.uptime() });
 });
 
-// Etherscan/BSCScan API keys (replace with real)
-const ETHERSCAN_API_KEY = "your_etherscan_api_key";
-const BSCSCAN_API_KEY = "your_bscscan_api_key";
-
-// Fetch token info from Etherscan
-app.get('/api/etherscan/:address', async (req, res) => {
-  try {
-    const { address } = req.params;
-    const response = await axios.get(
-      \`https://api.etherscan.io/api?module=token&action=tokeninfo&contractaddress=\${address}&apikey=\${ETHERSCAN_API_KEY}\`
-    );
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Fetch token info from BSCScan
-app.get('/api/bscscan/:address', async (req, res) => {
-  try {
-    const { address } = req.params;
-    const response = await axios.get(
-      \`https://api.bscscan.com/api?module=token&action=tokeninfo&contractaddress=\${address}&apikey=\${BSCSCAN_API_KEY}\`
-    );
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Example: Save a tracked token into Postgres
-app.post('/api/tokens', async (req, res) => {
-  try {
-    const { name, symbol, address, chain } = req.body;
-    const result = await pool.query(
-      "INSERT INTO tokens (name, symbol, address, chain) VALUES ($1,$2,$3,$4) RETURNING *",
-      [name, symbol, address, chain]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Get tracked tokens
 app.get('/api/tokens', async (req, res) => {
-  try {
-    const result = await pool.query("SELECT * FROM tokens ORDER BY id DESC");
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  const r = await pool.query('select id,address,name,symbol,chain,source,tx_hash,created_at from tokens order by id desc limit 500');
+  res.json({ data: r.rows });
 });
 
-app.listen(4000, () => console.log('Backend running on port 4000'));
+app.get('/api/influencers', async (req, res) => {
+  const r = await pool.query('select handle from influencers order by handle');
+  res.json({ data: r.rows.map(r=>r.handle) });
+});
+
+app.post('/api/influencers', async (req, res) => {
+  const { handle } = req.body || {};
+  if (!handle) return res.status(400).json({ error: 'handle required' });
+  await pool.query('insert into influencers(handle) values($1) on conflict do nothing', [ handle.startsWith('@')?handle:'@'+handle ]);
+  const rr = await pool.query('select handle from influencers order by handle');
+  res.json({ ok: true, data: rr.rows.map(r=>r.handle) });
+});
+
+app.post('/api/tokens', async (req, res) => {
+  const { name, symbol, address, chain, source } = req.body || {};
+  if (!address || !chain) return res.status(400).json({ error: 'address and chain required' });
+  const q = await pool.query('insert into tokens(address,name,symbol,chain,source,tx_hash) values($1,$2,$3,$4,$5,$6) on conflict(address) do nothing returning *', [address.toLowerCase(), name||null, symbol||null, chain, source||'manual', null]);
+  res.json({ ok: true, data: q.rows[0] || null });
+});
+
+app.listen(process.env.PORT||4000, ()=>console.log('backend listening'));
