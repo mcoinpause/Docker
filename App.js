@@ -10,7 +10,7 @@ const App = () => {
   const [tokens, setTokens] = useState([]);
 
   useEffect(() => {
-    fetch('http://localhost:4000/api/tokens')
+    fetch('https://mcoinpause-docker-4wqe.onrender.com/api/tokens')
       .then(res => res.json())
       .then(data => setTokens(data));
   }, []);
